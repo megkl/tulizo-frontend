@@ -1,23 +1,14 @@
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import VoiceAssistant from "./components/VoiceAssistant";
+import Dashboard from "./components/Dashboard";
 
 function App() {
+  const USER_ID = "meg123"; // initialize the logged-in user ID
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div>
+      <VoiceAssistant userId={USER_ID} />
+      <Dashboard userId={USER_ID} />
     </div>
   );
 }
