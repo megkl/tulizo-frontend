@@ -7,7 +7,7 @@ function App() {
 
   return (
     <div>
-      <VoiceAssistant userId={USER_ID} />
+      {/* <VoiceAssistant userId={USER_ID} /> */}
       <Dashboard userId={USER_ID} />
     </div>
   );

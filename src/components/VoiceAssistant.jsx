@@ -1,199 +1,209 @@
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
+import { Mic, Send, Volume2, Settings, User } from "lucide-react";
+
+const styles = {
+  container: {
+    maxWidth: "500px",
+    margin: "40px auto",
+    fontFamily: "'Inter', sans-serif",
+    backgroundColor: "#FFFFFF",
+    borderRadius: "32px",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.08)",
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+    height: "85vh",
+  },
+  header: {
+    padding: "24px",
+    background: "linear-gradient(135deg, #1E293B 0%, #334155 100%)",
+    color: "#FFFFFF",
+    textAlign: "center",
+  },
+  chatWindow: {
+    flex: 1,
+    padding: "20px",
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+    backgroundColor: "#F9FAFB",
+  },
+  aiBubble: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    color: "#1F2937",
+    padding: "14px 18px",
+    borderRadius: "20px 20px 20px 4px",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
+    maxWidth: "85%",
+    lineHeight: "1.5",
+  },
+  userBubble: {
+    alignSelf: "flex-end",
+    backgroundColor: "#5CC9A3",
+    color: "#FFFFFF",
+    padding: "14px 18px",
+    borderRadius: "20px 20px 4px 20px",
+    maxWidth: "85%",
+    lineHeight: "1.5",
+  },
+  inputArea: {
+    padding: "20px",
+    backgroundColor: "#FFFFFF",
+    borderTop: "1px solid #F3F4F6",
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+  inputPill: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    borderRadius: "24px",
+    padding: "8px 16px",
+    display: "flex",
+    alignItems: "center",
+  },
+  textField: {
+    border: "none",
+    background: "transparent",
+    outline: "none",
+    width: "100%",
+    padding: "8px",
+    fontSize: "15px",
+  },
+  micButton: (isListening) => ({
+    backgroundColor: isListening ? "#FDA4AF" : "#5CC9A3",
+    border: "none",
+    borderRadius: "50%",
+    width: "48px",
+    height: "48px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    boxShadow: isListening ? "0 0 15px rgba(253, 164, 175, 0.5)" : "0 4px 12px rgba(92, 201, 163, 0.3)",
+    color: "white",
+  }),
+};
 
 function VoiceAssistant({ userId }) {
   const [message, setMessage] = useState("");
-  const [response, setResponse] = useState("");
-  const [audio, setAudio] = useState(null);
+  const [chatHistory, setChatHistory] = useState([
+    { role: "ai", text: "Hello! I'm Tulizo. How can I help you today?" }
+  ]);
   const [isListening, setIsListening] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [voices, setVoices] = useState([]);
-  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [selectedVoice, setSelectedVoice] = useState("default");
 
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
-
+  const scrollRef = useRef(null);
   const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-  // Fetch user's preferred voice on load
   useEffect(() => {
-    const fetchVoice = async () => {
-      try {
-        const res = await axios.get(`${BACKEND_URL}/voice`, { params: { user_id: userId } });
-        setSelectedVoice(res.data.voice || "default");
-      } catch (e) {
-        console.error("Failed to fetch voice:", e);
-      }
-    };
-    fetchVoice();
-
-    // Example voice options
-    setVoices(["default", "calm", "friendly", "energetic"]);
-  }, [userId]);
-
-  const handleVoiceChange = async (voice) => {
-    setSelectedVoice(voice);
-    try {
-      await axios.post(`${BACKEND_URL}/voice`, { user_id: userId, voice_id: voice });
-    } catch (e) {
-      console.error("Failed to update voice:", e);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  };
-
-  // Initialize Speech Recognition
-  const initRecognition = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser.");
-      return null;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    recognitionRef.current = recognition;
-    return recognition;
-  };
+  }, [chatHistory]);
 
   const startListening = () => {
-    const recognition = initRecognition();
-    if (!recognition) return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("Browser not supported");
 
-    setIsListening(true);
-    recognition.start();
-
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setMessage(transcript);
       handleSubmit(transcript);
     };
-
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error);
-      setIsListening(false);
-    };
+    recognition.start();
   };
 
   const handleSubmit = async (textInput) => {
-    const userMessage = textInput || message;
-    if (!userMessage.trim()) return;
+    const userMsg = textInput || message;
+    if (!userMsg.trim()) return;
 
+    // Add user message to UI
+    setChatHistory(prev => [...prev, { role: "user", text: userMsg }]);
+    setMessage("");
     setIsLoading(true);
-    setResponse("Tulizo is thinking...");
-    setAudio(null);
 
     try {
       const res = await axios.post(`${BACKEND_URL}/chat`, {
         user_id: userId,
-        message: userMessage,
+        message: userMsg,
         voice_id: selectedVoice,
       });
-      setResponse(res.data.text || "Tulizo has no response.");
+
+      const aiText = res.data.text || "I'm not sure how to respond to that.";
+      setChatHistory(prev => [...prev, { role: "ai", text: aiText }]);
 
       if (res.data.audio) {
-        const byteCharacters = atob(res.data.audio);
-        const byteNumbers = new Array(byteCharacters.length)
-          .fill()
-          .map((_, i) => byteCharacters.charCodeAt(i));
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        setAudio(url);
-
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.volume = 0;
-            audioRef.current.play().catch(err => console.error("Autoplay blocked:", err));
-            let vol = 0;
-            const fadeInterval = setInterval(() => {
-              vol += 0.05;
-              if (audioRef.current) audioRef.current.volume = Math.min(vol, 1);
-              if (vol >= 1) clearInterval(fadeInterval);
-            }, 50);
-          }
-        }, 100);
+        const audioUrl = `data:audio/mpeg;base64,${res.data.audio}`;
+        const audioObj = new Audio(audioUrl);
+        audioObj.play();
       }
-    } catch (error) {
-      console.error("Backend error:", error);
-      setResponse("Sorry, Tulizo is currently unavailable.");
+    } catch (e) {
+      setChatHistory(prev => [...prev, { role: "ai", text: "Connection lost. Please try again." }]);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: "600px", margin: "auto", textAlign: "center", padding: "2rem" }}>
-      <h1>🎙️ Tulizo AI</h1>
+    <div style={styles.container}>
+      <header style={styles.header}>
+        <h3 style={{ margin: 0, fontSize: "18px", letterSpacing: "0.5px" }}>TULIZO AI</h3>
+        <p style={{ margin: "4px 0 0", fontSize: "12px", opacity: 0.8 }}>Virtual Wellness Assistant</p>
+      </header>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label>Select Voice: </label>
-        <select
-          value={selectedVoice || "default"}
-          onChange={(e) => handleVoiceChange(e.target.value)}
-          style={{ padding: "6px 10px", borderRadius: "6px" }}
-        >
-          {voices.map(v => <option key={v} value={v}>{v}</option>)}
-        </select>
+      <div style={styles.chatWindow} ref={scrollRef}>
+        {chatHistory.map((chat, i) => (
+          <div key={i} style={chat.role === "ai" ? styles.aiBubble : styles.userBubble}>
+            {chat.text}
+          </div>
+        ))}
+        {isLoading && (
+          <div style={{ ...styles.aiBubble, fontStyle: "italic", opacity: 0.7 }}>
+            Tulizo is thinking...
+          </div>
+        )}
       </div>
 
-      <button
-        onClick={startListening}
-        style={{
-          backgroundColor: isListening ? "#FF6B6B" : "#5CC9A3",
-          color: "white",
-          padding: "12px 20px",
-          border: "none",
-          borderRadius: "25px",
-          fontSize: "16px",
-          cursor: "pointer",
-          marginBottom: "1rem",
-        }}
-      >
-        {isListening ? "Listening..." : "🎤 Speak to Tulizo"}
-      </button>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSubmit();
-        }}
-      >
-        <input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Or type your message..."
-          style={{ width: "80%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}
-        />
-        <button
-          type="submit"
-          style={{
-            marginLeft: "10px",
-            padding: "10px 16px",
-            backgroundColor: "#5CC9A3",
-            border: "none",
-            borderRadius: "8px",
-            color: "white",
-          }}
+      <div style={styles.inputArea}>
+        <button 
+          onClick={startListening} 
+          style={styles.micButton(isListening)}
         >
-          Send
+          <Mic size={20} strokeWidth={2.5} />
         </button>
-      </form>
 
-      {isLoading && <p style={{ color: "#888", marginTop: "1rem" }}>💭 Tulizo is thinking...</p>}
+        <form 
+          style={styles.inputPill} 
+          onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
+        >
+          <input
+            style={styles.textField}
+            placeholder="Type a message..."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+          <button type="submit" style={{ border: "none", background: "none", cursor: "pointer", color: "#94A3B8" }}>
+            <Send size={18} />
+          </button>
+        </form>
+      </div>
 
-      {response && !isLoading && (
-        <div style={{ marginTop: "1.5rem", textAlign: "left" }}>
-          <h3>💬 Tulizo says:</h3>
-          <p style={{ background: "#f8f8f8", padding: "12px", borderRadius: "8px" }}>{response}</p>
-        </div>
-      )}
-
-      {audio && (
-        <div style={{ marginTop: "1rem" }}>
-          <audio ref={audioRef} src={audio} controls />
-        </div>
-      )}
+      <div style={{ padding: "10px 24px", backgroundColor: "#F9FAFB", display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748B" }}>
+        <span>Voice: {selectedVoice}</span>
+        <Volume2 size={14} />
+      </div>
     </div>
   );
 }
