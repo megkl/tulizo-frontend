@@ -4,74 +4,114 @@ import { Volume2, Check, Play, Save } from 'lucide-react';
 
 const VoiceSettings = ({ userId }) => {
   const [voices, setVoices] = useState([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [currentVoiceId, setCurrentVoiceId] = useState("");
+  const [playingId, setPlayingId] = useState(null);
+const COLORS = {
+  primary: "#5CC9A3",
+  secondary: "#60A5FA",
+  dark: "#1E293B",
+  textMuted: "#94A3B8",
+  bgLight: "#b3b8c4ff",
+  white: "#FFFFFF",
+  accent: "#FDA4AF", // Used for active mic
+};
+
+const commonStyles = {
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: "24px",
+    padding: "30px",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+  },
+  tag: {
+    padding: "10px 15px",
+    borderRadius: "10px",
+    color: COLORS.white,
+    fontSize: "12px",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+  iconBtn: {
+    border: "none",
+    background: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+};
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        // Fetch curated voices and current user preference
-        const [listRes, prefRes] = await Promise.all([
-          axios.get(`${process.env.REACT_APP_BACKEND_URL}/settings/voices`),
-          axios.get(`${process.env.REACT_APP_BACKEND_URL}/settings/preference/${userId}`)
-        ]);
-        setVoices(listRes.data.voices);
-        setSelectedId(prefRes.data.preference?.voice_id);
-      } catch (e) {
-        console.error("Failed to load voice settings", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
+    // Fetch available voices
+    axios.get(`${process.env.REACT_APP_BACKEND_URL}/settings/voices`).then(res => setVoices(res.data.voices));
+    // Fetch current preference
+    axios.get(`${process.env.REACT_APP_BACKEND_URL}/settings/preference/${userId}`).then(res => {
+      if (res.data.preference) setCurrentVoiceId(res.data.preference.voice_id);
+    });
   }, [userId]);
 
-  const handleSave = async (voice) => {
+  const handleSelect = async (voice) => {
+    // If clicking the same voice, we "unselect" by reverting to default
+    const isUnselecting = currentVoiceId === voice.voice_id;
+    const targetVoiceId = isUnselecting ? "DEFAULT_ENV_ID" : voice.voice_id; // Backend handles default mapping
+    const targetName = isUnselecting ? "Default" : voice.name;
+
     try {
       await axios.post(`${process.env.REACT_APP_BACKEND_URL}/settings/save`, {
         user_id: userId,
-        voice_id: voice.voice_id,
-        voice_name: voice.name
+        voice_id: targetVoiceId,
+        voice_name: targetName
       });
-      setSelectedId(voice.voice_id);
-      alert(`Tulizo will now speak with ${voice.name}'s voice!`);
+      setCurrentVoiceId(targetVoiceId);
+      alert(`Voice set to ${targetName}`);
     } catch (e) {
-      alert("Failed to save preference.");
+      console.error("Save failed", e);
     }
   };
 
-  if (loading) return <div style={{ padding: '40px' }}>Loading voices...</div>;
+  const playPreview = (url, id) => {
+    if (!url) return;
+    if (playingId) playingId.pause();
+    const audio = new Audio(url);
+    setPlayingId(audio);
+    audio.play();
+    audio.onended = () => setPlayingId(null);
+  };
 
   return (
-    <div style={{ padding: '40px' }}>
-      <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '10px' }}>Voice Persona</h2>
-      <p style={{ color: '#64748B', marginBottom: '30px' }}>Choose a voice that helps you feel calm and focused.</p>
-      
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
-        {voices.map((v) => (
+    <div style={commonStyles.card}>
+      <h2 style={{ marginBottom: '20px' }}>Voice Persona</h2>
+      <div style={{ display: 'grid', gap: '15px' }}>
+        {voices.map(v => (
           <div key={v.voice_id} style={{
-            padding: '20px',
-            borderRadius: '20px',
-            backgroundColor: '#FFFFFF',
-            border: selectedId === v.voice_id ? '2px solid #5CC9A3' : '1px solid #E2E8F0',
-            position: 'relative'
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            padding: '15px',
+            borderRadius: '15px',
+            background: currentVoiceId === v.voice_id ? '#F0FDF4' : '#F8FAFC',
+            border: currentVoiceId === v.voice_id ? `2px solid ${COLORS.primary}` : '2px solid transparent'
           }}>
-            <h3 style={{ fontWeight: '600', marginBottom: '5px' }}>{v.name}</h3>
-            <p style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '15px' }}>{v.description}</p>
+            <div>
+              <div style={{ fontWeight: 'bold' }}>{v.name}</div>
+              <div style={{ fontSize: '12px', color: COLORS.textMuted }}>{v.category}</div>
+            </div>
             
             <div style={{ display: 'flex', gap: '10px' }}>
+              {v.preview_url && (
+                <button onClick={() => playPreview(v.preview_url, v.voice_id)} style={smallBtnStyle}>
+                  {playingId && playingId.src === v.preview_url ? "⏸" : "▶"}
+                </button>
+              )}
               <button 
-                onClick={() => new Audio(v.preview_url).play()}
-                style={{ ...btnStyle, backgroundColor: '#F1F5F9', color: '#1E293B' }}
+                onClick={() => handleSelect(v)}
+                style={{
+                  ...smallBtnStyle,
+                  backgroundColor: currentVoiceId === v.voice_id ? COLORS.primary : '#E2E8F0',
+                  color: currentVoiceId === v.voice_id ? 'white' : 'black'
+                }}
               >
-                <Play size={14} /> Preview
-              </button>
-              <button 
-                onClick={() => handleSave(v)}
-                style={{ ...btnStyle, backgroundColor: selectedId === v.voice_id ? '#5CC9A3' : '#1E293B', color: 'white' }}
-              >
-                {selectedId === v.voice_id ? <Check size={14} /> : <Save size={14} />} 
-                {selectedId === v.voice_id ? " Selected" : " Use This"}
+                {currentVoiceId === v.voice_id ? "Selected" : "Select"}
               </button>
             </div>
           </div>
@@ -81,15 +121,11 @@ const VoiceSettings = ({ userId }) => {
   );
 };
 
-const btnStyle = {
+const smallBtnStyle = {
   border: 'none',
   padding: '8px 12px',
   borderRadius: '10px',
-  fontSize: '12px',
   cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '5px',
   fontWeight: '600'
 };
 
